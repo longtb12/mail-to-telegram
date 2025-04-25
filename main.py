@@ -27,7 +27,6 @@ def connect_imap():
         mail.login(username, password)
         mail.select('INBOX')
         capabilities = mail.capability()[1][0].decode().split()
-        logging.info(f"Server capabilities: {capabilities}")
         if 'IDLE' not in capabilities:
             logging.error("IMAP server does not support IDLE")
         return mail
@@ -58,6 +57,7 @@ def send_to_telegram(email_data):
     try:
         text = f"New Email\nFrom: {email_data['from']}\nSubject: {email_data['subject']}\nBody: {email_data['body']}"
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': text})
+        logging.info(f"{datetime.now()}: {response}")
         if response.ok:
             logging.info(f"Sent email {email_data['subject']} to Telegram")
             return True
@@ -78,11 +78,11 @@ def mark_as_read(mail, email_id):
 def monitor_emails():
     while True:
         try:
-            logging.info("Starting IMAP IDLE monitoring")
             while True:
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
                 _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
+                logging.info(datetime.now())
                 print(email_ids)
                 for email_id in email_ids[0].split():
                     email_data = get_email_details(mail, email_id)
@@ -101,6 +101,6 @@ def monitor_emails():
             time.sleep(1)  
 
 if __name__ == '__main__':
-    logging.info("Starting Gmail to Telegram forwarder (IMAP IDLE)")
+    logging.info("Starting Gmail to Telegram forwarder")
     monitor_emails()
 
