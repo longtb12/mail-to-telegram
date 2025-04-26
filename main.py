@@ -48,6 +48,8 @@ def get_email_details(mail, email_id):
                 if part.get_content_type() == 'text/plain':
                     body = part.get_payload(decode=True).decode()
                     break
+        else:
+            return False
         
         return {'subject': subject, 'from': from_, 'body': body}
     except Exception as e:
@@ -97,7 +99,7 @@ def monitor_emails():
                 
                 time.sleep(sleep_time)        
         except Exception as e:
-            logging.error(f"Error in IMAP IDLE: {e}")
+            logging.error(f"Error: {e}")
             time.sleep(sleep_time)  
         finally:
             try:
