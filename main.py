@@ -56,8 +56,12 @@ def get_email_details(mail, email_id):
 
 def send_to_telegram(email_data):
     try:
-        match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", email_data['body'])
-        text = f"New Email\nFrom: {email_data['from']}\nBody: {match.group()}"
+        body = email_data['body']
+        match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", body)
+        if(match):
+            body = match.group()
+
+        text = f"New Email\nFrom: {email_data['from']}\nBody: {body}"
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': text})
         logging.info(f"{datetime.now()}: {response}")
         if response.ok:
