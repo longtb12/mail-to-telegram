@@ -10,6 +10,7 @@ import os
 import re
 from email.header import decode_header
 import unicodedata
+import ast
 
 # Load variables from .env into environment
 load_dotenv()
@@ -18,8 +19,8 @@ password = os.getenv("GMAIL_APP_PASSWORD")
 tele_token = os.getenv("TELEGRAM_TOKEN")
 chat_id = os.getenv("CHAT_ID")
 sleep_time = int(os.getenv("SLEEPTIME"))
-allowed_sender = os.getenv("ALLOWED_SENDER")
-valid_list = os.getenv("VALID_SUBJECT")
+allowed_sender = ast.literal_eval(os.getenv("ALLOWED_SENDER", "[]"))
+valid_list = ast.literal_eval(os.getenv("VALID_SUBJECT", "[]"))
 tele_url = f'https://api.telegram.org/bot{tele_token}/sendMessage'
 
 def strip_accents(s):
@@ -32,8 +33,6 @@ def normalize(s, remove_accents=True):
     if remove_accents:
         s = strip_accents(s)
     return s
-
-normalized_set = {normalize(s) for s in valid_list}
 
 # Set up logging
 logging.basicConfig(filename='gmail_to_telegram.log', level=logging.INFO)
@@ -79,8 +78,8 @@ def get_email_details(mail, email_id):
 
 def send_to_telegram(email_data):
     try:
-        if (any(valid in normalize(email_data['subject']) for valid in normalized_set) == False):
-            return False
+        if (any(normalize(valid) in normalize(email_data['subject']) for valid in valid_list) == False):
+            return True
 
         body = email_data['body']
         match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", body)
