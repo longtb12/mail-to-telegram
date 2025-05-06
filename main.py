@@ -8,6 +8,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 import re
+from email.header import decode_header
+import unicodedata
 
 # Load variables from .env into environment
 load_dotenv()
@@ -17,7 +19,21 @@ tele_token = os.getenv("TELEGRAM_TOKEN")
 chat_id = os.getenv("CHAT_ID")
 sleep_time = int(os.getenv("SLEEPTIME"))
 allowed_sender = os.getenv("ALLOWED_SENDER")
+valid_list = os.getenv("VALID_SUBJECT")
 tele_url = f'https://api.telegram.org/bot{tele_token}/sendMessage'
+
+def strip_accents(s):
+    s = unicodedata.normalize('NFD', s)
+    return ''.join(c for c in s if not unicodedata.combining(c))
+
+def normalize(s, remove_accents=True):
+    s = s.casefold()
+    s = unicodedata.normalize('NFC', s)
+    if remove_accents:
+        s = strip_accents(s)
+    return s
+
+normalized_set = {normalize(s) for s in valid_list}
 
 # Set up logging
 logging.basicConfig(filename='gmail_to_telegram.log', level=logging.INFO)
@@ -51,6 +67,11 @@ def get_email_details(mail, email_id):
         else:
             return False
         
+        subject = ''.join([
+            part.decode(encoding or 'utf-8') if isinstance(part, bytes) else part
+            for part, encoding in decode_header(subject)
+        ])
+
         return {'subject': subject, 'from': from_, 'body': body}
     except Exception as e:
         logging.error(f"Error fetching email {email_id}: {e}")
@@ -58,12 +79,15 @@ def get_email_details(mail, email_id):
 
 def send_to_telegram(email_data):
     try:
+        if (any(valid in normalize(email_data['subject']) for valid in normalized_set) == False):
+            return False
+
         body = email_data['body']
         match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", body)
         if(match):
             body = match.group()
 
-        text = f"New Email\nFrom: {email_data['from']}\nBody: {body}"
+        text = f"Subject: {email_data['subject']}\nBody: {body}"
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': text})
         logging.info(f"{datetime.now()}: {response}")
         if response.ok:
