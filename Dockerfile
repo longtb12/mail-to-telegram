@@ -1,15 +1,17 @@
-# Use official Python base image
 FROM python:3.13-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements and source code
+RUN apt-get update && apt-get install -y curl unzip && rm -rf /var/lib/apt/lists/*
+
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+    unzip awscliv2.zip && \
+    ./aws/install && \
+    rm -rf awscliv2.zip aws
+
 COPY requirements.txt ./
 COPY . .
 
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the script
 CMD ["python", "main.py"]
