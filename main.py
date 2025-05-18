@@ -2,7 +2,6 @@ import imaplib
 import email
 import email.utils
 import requests
-import logging
 import time
 from datetime import datetime
 from dotenv import load_dotenv
@@ -11,6 +10,8 @@ import re
 from email.header import decode_header
 import unicodedata
 import ast
+from log_util import get_logger
+from email_type import EmailType
 
 # Load variables from .env into environment
 load_dotenv()
@@ -20,8 +21,9 @@ tele_token = os.getenv("TELEGRAM_TOKEN")
 chat_id = os.getenv("CHAT_ID")
 sleep_time = int(os.getenv("SLEEPTIME"))
 allowed_sender = ast.literal_eval(os.getenv("ALLOWED_SENDER", "[]"))
-valid_list = ast.literal_eval(os.getenv("VALID_SUBJECT", "[]"))
 tele_url = f'https://api.telegram.org/bot{tele_token}/sendMessage'
+
+logger = get_logger()
 
 def strip_accents(s):
     s = unicodedata.normalize('NFD', s)
@@ -34,9 +36,6 @@ def normalize(s, remove_accents=True):
         s = strip_accents(s)
     return s
 
-# Set up logging
-logging.basicConfig(filename='gmail_to_telegram.log', level=logging.INFO)
-
 def connect_imap():
     try:
         mail = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -44,10 +43,10 @@ def connect_imap():
         mail.select('INBOX')
         capabilities = mail.capability()[1][0].decode().split()
         if 'IDLE' not in capabilities:
-            logging.error("IMAP server does not support IDLE")
+            logger.error("IMAP server does not support IDLE")
         return mail
     except Exception as e:
-        logging.error(f"Error connecting to IMAP: {e}")
+        logger.error(f"Error connecting to IMAP: {e}")
         raise
 
 def get_email_details(mail, email_id):
@@ -71,40 +70,63 @@ def get_email_details(mail, email_id):
             for part, encoding in decode_header(subject)
         ])
 
-        return {'subject': subject, 'from': from_, 'body': body}
+        return {'email_id': email_id,'subject': subject, 'from': from_, 'body': body}
     except Exception as e:
-        logging.error(f"Error fetching email {email_id}: {e}")
+        logger.error(f"Error fetching email {email_id}: {e}")
         return None
+
+def getType(subject):
+    for type in EmailType:
+        if(normalize(type.value) in normalize(subject)):
+            return type.name
+    return False
+
+def getBody(email_type, body):
+    match = ""
+    match email_type:
+        case EmailType.TRAVEL_CODE.name:
+            match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", body)
+            return f"""<b>Subject:</b> {EmailType.TRAVEL_CODE.value}
+<b>Body:</b>
+Click vào <a href="{match.group()}">Link</a> để xác nhận\n
+<i>***Mọi người cứ bấm vào link, rồi lấy mã 4 số là được</i>"""
+        case EmailType.UPDATE_FAMILY.name:
+            match = re.search(r"https:\/\/www\.netflix\.com\/account\/update-primary-location\?[^)\]\s]+", body)
+            return f"""<b>Subject:</b> {EmailType.UPDATE_FAMILY.value}
+<b>Body:</b>
+Click vào <a href="{match.group()}">Link</a> để xác nhận\n
+<i>***Mọi người cứ bấm vào link, rồi chọn Xác Nhận là được</i>"""
+    
+    return False
 
 def send_to_telegram(email_data):
     try:
-        if (any(normalize(valid) in normalize(email_data['subject']) for valid in valid_list) == False):
+        email_type = getType(email_data['subject'])
+        if (email_type == False):
             return True
 
-        body = email_data['body']
-        match = re.search(r"https:\/\/www\.netflix\.com\/account\/travel\/verify[^\s\]]+", body)
-        if(match):
-            body = match.group()
-
-        text = f"Subject: {email_data['subject']}\nBody: {body}"
-        response = requests.post(tele_url, data={'chat_id': chat_id, 'text': text})
-        logging.info(f"{datetime.now()}: {response}")
+        body = getBody(email_type, email_data['body'])
+        if (body == False):
+            return True
+        
+        response = requests.post(tele_url, data={'chat_id': chat_id, 'text': body, 'parse_mode': 'HTML'})
+        logger.info(f"{datetime.now()}: {response}")
         if response.ok:
-            logging.info(f"Sent email {email_data['subject']} to Telegram")
+            logger.info(f"Sent email {email_data['subject']} to Telegram")
             return True
         else:
-            logging.error(f"Failed to send to Telegram: {response.text}")
+            logger.error(f"Failed to send to Telegram: {response.text}")
             return False
     except Exception as e:
-        logging.error(f"Error sending to Telegram: {e}")
+        logger.error(f"Error sending to Telegram: {e}")
         return False
 
 def mark_as_read(mail, email_id):
     try:
         mail.store(email_id, '+FLAGS', '\\Seen')
-        logging.info(f"Marked email {email_id} as read")
+        logger.info(f"Marked email {email_id} as read")
     except Exception as e:
-        logging.error(f"Error marking email {email_id} as read: {e}")
+        logger.error(f"Error marking email {email_id} as read: {e}")
 
 def monitor_emails():
     while True:
@@ -113,7 +135,7 @@ def monitor_emails():
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
                 _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
-                logging.info(datetime.now())
+                logger.info(datetime.now())
                 print(email_ids)
                 for email_id in email_ids[0].split():
                     email_data = get_email_details(mail, email_id)
@@ -122,7 +144,7 @@ def monitor_emails():
                 
                 time.sleep(sleep_time)        
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logger.error(f"Error: {e}")
             time.sleep(sleep_time)  
         finally:
             try:
@@ -132,6 +154,5 @@ def monitor_emails():
             time.sleep(1)  
 
 if __name__ == '__main__':
-    logging.info("Starting Gmail to Telegram forwarder")
+    logger.info("Starting Gmail to Telegram forwarder")
     monitor_emails()
-
