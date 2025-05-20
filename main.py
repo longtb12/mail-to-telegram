@@ -75,13 +75,13 @@ def get_email_details(mail, email_id):
         logger.error(f"Error fetching email {email_id}: {e}")
         return None
 
-def getType(subject):
+def get_type(subject):
     for type in EmailType:
         if(normalize(type.value) in normalize(subject)):
             return type.name
     return False
 
-def getBody(email_type, body):
+def get_body(email_type, body):
     match = ""
     match email_type:
         case EmailType.TRAVEL_CODE.name:
@@ -101,13 +101,13 @@ Click vào <a href="{match.group()}">Link</a> để xác nhận\n
 
 def send_to_telegram(email_data):
     try:
-        email_type = getType(email_data['subject'])
+        email_type = get_type(email_data['subject'])
         if (email_type == False):
-            return True
+            return False
 
-        body = getBody(email_type, email_data['body'])
+        body = get_body(email_type, email_data['body'])
         if (body == False):
-            return True
+            return False
         
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': body, 'parse_mode': 'HTML'})
         logger.info(f"{datetime.now()}: {response}")
