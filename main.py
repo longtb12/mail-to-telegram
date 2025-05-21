@@ -121,12 +121,11 @@ def send_to_telegram(email_data):
         logger.error(f"Error sending to Telegram: {e}")
         return False
 
-def mark_as_read(mail, email_id):
+def mark_as_unread(mail, email_id):
     try:
-        mail.store(email_id, '+FLAGS', '\\Seen')
-        logger.info(f"Marked email {email_id} as read")
+        mail.store(email_id, '-FLAGS', '\\Seen')
     except Exception as e:
-        logger.error(f"Error marking email {email_id} as read: {e}")
+        logger.error(f"Error marking email {email_id} as unread: {e}")
 
 def monitor_emails():
     while True:
@@ -135,12 +134,12 @@ def monitor_emails():
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
                 _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
-                logger.info(datetime.now())
-                print(email_ids)
+                logger.info(f"{datetime.now()}: {email_ids}")
+                
                 for email_id in email_ids[0].split():
                     email_data = get_email_details(mail, email_id)
-                    if email_data and send_to_telegram(email_data):
-                        mark_as_read(mail, email_id)
+                    if email_data == False or send_to_telegram(email_data) == False:
+                        mark_as_unread(mail, email_id)
                 
                 time.sleep(sleep_time)        
         except Exception as e:
