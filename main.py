@@ -12,6 +12,7 @@ import unicodedata
 import ast
 from log_util import get_logger
 from email_type import EmailType
+from ttl_int_array import TTLIntArray
 
 # Load variables from .env into environment
 load_dotenv()
@@ -24,6 +25,7 @@ allowed_sender = ast.literal_eval(os.getenv("ALLOWED_SENDER", "[]"))
 tele_url = f'https://api.telegram.org/bot{tele_token}/sendMessage'
 
 logger = get_logger()
+already_read = TTLIntArray()
 
 def strip_accents(s):
     s = unicodedata.normalize('NFD', s)
@@ -134,9 +136,16 @@ def monitor_emails():
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
                 _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
-                logger.info(f"{datetime.now()}: {email_ids}")
-                
+
+                ids = []
                 for email_id in email_ids[0].split():
+                    if (already_read.exists(email_id) == False):
+                        ids.append(email_id)
+
+                logger.info(f"{datetime.now()}: {ids}")
+                
+                for email_id in ids:
+                    already_read.add(email_id)
                     email_data = get_email_details(mail, email_id)
                     if email_data == False or send_to_telegram(email_data) == False:
                         mark_as_unread(mail, email_id)
