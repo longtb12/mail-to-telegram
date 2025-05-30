@@ -147,10 +147,9 @@ def monitor_emails():
                     if (already_read.exists(email_id) == False):
                         ids.append(email_id)
 
-                logger.info(f"Processing email_ids: {ids}")
-                
                 for email_id in ids:
                     already_read.add(email_id)
+                    logger.info(f"Processing email_id: {email_id}")
                     email_data = get_email_details(mail, email_id)
                     if email_data == False or send_to_telegram(email_data) == False:
                         mark_as_unread(mail, email_id)
