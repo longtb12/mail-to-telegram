@@ -167,4 +167,5 @@ def monitor_emails():
             time.sleep(1)  
 
 if __name__ == '__main__':
+    logger.info("Starting email monitoring...")
     monitor_emails()
