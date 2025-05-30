@@ -139,8 +139,7 @@ def monitor_emails():
             while True:
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
-                # _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
-                _, email_ids = mail.search(None, f'(SINCE 28-May-2025)')
+                _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
 
                 ids = []
                 for email_id in email_ids[0].split():
