@@ -17,5 +17,6 @@ def get_logger():
             stream_name=stream_name
         )
         logger.addHandler(handler)
+        logger.addHandler(logging.StreamHandler())
 
     return logger

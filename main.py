@@ -59,6 +59,8 @@ def get_email_details(mail, email_id):
         from_ = msg['from'] or '(No Sender)'
         body = ''
         sender = email.utils.parseaddr(msg.get("From"))[1]
+        logger.info('Trying to read sender:' + sender)
+        
         if sender in allowed_sender and msg.is_multipart():
             for part in msg.walk():
                 if part.get_content_type() == 'text/plain':
@@ -71,6 +73,7 @@ def get_email_details(mail, email_id):
             part.decode(encoding or 'utf-8') if isinstance(part, bytes) else part
             for part, encoding in decode_header(subject)
         ])
+        logger.info(f"Trying to read an email with subject {email_id}: {subject}")
 
         return {'email_id': email_id,'subject': subject, 'from': from_, 'body': body}
     except Exception as e:
@@ -111,6 +114,7 @@ def send_to_telegram(email_data):
         if (body == False):
             return False
         
+        logger.info(f"Trying to send email ({email_data['subject']}) to Telegram")
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': body, 'parse_mode': 'HTML'})
         logger.info(f"{datetime.now()}: {response}")
         if response.ok:
@@ -135,14 +139,15 @@ def monitor_emails():
             while True:
                 mail = connect_imap()
                 today = datetime.today().strftime("%d-%b-%Y")
-                _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
+                # _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
+                _, email_ids = mail.search(None, f'(SINCE 28-May-2025)')
 
                 ids = []
                 for email_id in email_ids[0].split():
                     if (already_read.exists(email_id) == False):
                         ids.append(email_id)
 
-                logger.info(f"{datetime.now()}: {ids}")
+                logger.info(f"Processing email_ids: {ids}")
                 
                 for email_id in ids:
                     already_read.add(email_id)
@@ -162,5 +167,4 @@ def monitor_emails():
             time.sleep(1)  
 
 if __name__ == '__main__':
-    logger.info("Starting Gmail to Telegram forwarder")
     monitor_emails()
