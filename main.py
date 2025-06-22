@@ -13,6 +13,7 @@ import ast
 from log_util import get_logger
 from email_type import EmailType
 from ttl_int_array import TTLIntArray
+from mysql_util import save_email_to_db
 
 # Load variables from .env into environment
 load_dotenv()
@@ -23,9 +24,24 @@ chat_id = os.getenv("CHAT_ID")
 sleep_time = int(os.getenv("SLEEPTIME"))
 allowed_sender = ast.literal_eval(os.getenv("ALLOWED_SENDER", "[]"))
 tele_url = f'https://api.telegram.org/bot{tele_token}/sendMessage'
-
 logger = get_logger()
-already_read = TTLIntArray()
+
+def build_search_criteria():
+    today = datetime.today().strftime("%d-%b-%Y")
+    if allowed_sender:
+        # Build nested ORs for multiple senders
+        senders = [f'FROM "{sender}"' for sender in allowed_sender]
+        if len(senders) == 1:
+            sender_criteria = senders[0]
+        else:
+            # Nest ORs: OR OR FROM "a" FROM "b" FROM "c"
+            sender_criteria = senders[0]
+            for s in senders[1:]:
+                sender_criteria = f'OR {sender_criteria} {s}'
+        criteria = f'UNSEEN SINCE {today} {sender_criteria}'
+    else:
+        criteria = f'UNSEEN SINCE {today}'
+    return criteria
 
 def strip_accents(s):
     s = unicodedata.normalize('NFD', s)
@@ -57,11 +73,11 @@ def get_email_details(mail, email_id):
         msg = email.message_from_bytes(data[0][1])
         subject = msg['subject'] or '(No Subject)'
         from_ = msg['from'] or '(No Sender)'
-        body = ''
         sender = email.utils.parseaddr(msg.get("From"))[1]
         logger.info('Trying to read sender:' + sender)
-        
-        if sender in allowed_sender and msg.is_multipart():
+
+        body = ''
+        if msg.is_multipart():
             for part in msg.walk():
                 if part.get_content_type() == 'text/plain':
                     body = part.get_payload(decode=True).decode()
@@ -78,7 +94,7 @@ def get_email_details(mail, email_id):
         return {'email_id': email_id,'subject': subject, 'from': from_, 'body': body}
     except Exception as e:
         logger.error(f"Error fetching email {email_id}: {e}")
-        return None
+        return False
 
 def get_type(subject):
     for type in EmailType:
@@ -118,6 +134,7 @@ def send_to_telegram(email_data):
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': body, 'parse_mode': 'HTML'})
         logger.info(f"{datetime.now()}: {response}")
         if response.ok:
+            save_email_to_db(email_data)
             logger.info(f"Sent email {email_data['subject']} to Telegram")
             return True
         else:
@@ -127,31 +144,19 @@ def send_to_telegram(email_data):
         logger.error(f"Error sending to Telegram: {e}")
         return False
 
-def mark_as_unread(mail, email_id):
-    try:
-        mail.store(email_id, '-FLAGS', '\\Seen')
-    except Exception as e:
-        logger.error(f"Error marking email {email_id} as unread: {e}")
-
 def monitor_emails():
     while True:
         try:
             while True:
                 mail = connect_imap()
-                today = datetime.today().strftime("%d-%b-%Y")
-                _, email_ids = mail.search(None, f'(UNSEEN SINCE {today})')
+                criteria = build_search_criteria()
+                _, email_ids = mail.search(None, criteria)
 
-                ids = []
                 for email_id in email_ids[0].split():
-                    if (already_read.exists(email_id) == False):
-                        ids.append(email_id)
-
-                for email_id in ids:
-                    already_read.add(email_id)
                     logger.info(f"Processing email_id: {email_id}")
                     email_data = get_email_details(mail, email_id)
-                    if email_data == False or send_to_telegram(email_data) == False:
-                        mark_as_unread(mail, email_id)
+                    if email_data:
+                        send_to_telegram(email_data)
                 
                 time.sleep(sleep_time)        
         except Exception as e:
