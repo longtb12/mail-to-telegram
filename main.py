@@ -38,7 +38,7 @@ def build_search_criteria():
             sender_criteria = senders[0]
             for s in senders[1:]:
                 sender_criteria = f'OR {sender_criteria} {s}'
-        criteria = f'SINCE 21-Jun-2025 {sender_criteria}'
+        criteria = f'UNSEEN SINCE {today} {sender_criteria}'
     else:
         criteria = f'UNSEEN SINCE {today}'
     return criteria
