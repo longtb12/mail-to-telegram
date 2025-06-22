@@ -2,3 +2,4 @@ python-dotenv
 requests
 boto3 
 watchtower
+mysql-connector-python
