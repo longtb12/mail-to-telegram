@@ -14,13 +14,14 @@ def save_email_to_db(email_data):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO emails (email_id, subject, sender, body)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO emails (email_id, subject, sender, body, body_snippet)
+            VALUES (%s, %s, %s, %s, %s)
         """, (
             str(email_data.get('email_id')),
             email_data.get('subject'),
             email_data.get('from'),
-            email_data.get('body')
+            email_data.get('raw_body'),
+            email_data.get('body_snippet')
         ))
         conn.commit()
     finally:

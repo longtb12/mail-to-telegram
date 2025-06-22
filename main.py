@@ -38,7 +38,7 @@ def build_search_criteria():
             sender_criteria = senders[0]
             for s in senders[1:]:
                 sender_criteria = f'OR {sender_criteria} {s}'
-        criteria = f'UNSEEN SINCE {today} {sender_criteria}'
+        criteria = f'SINCE 21-Jun-2025 {sender_criteria}'
     else:
         criteria = f'UNSEEN SINCE {today}'
     return criteria
@@ -85,13 +85,23 @@ def get_email_details(mail, email_id):
         else:
             return False
         
+        raw_body = ''
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == 'text/html':
+                    raw_body = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+                    break
+                elif part.get_content_type() == 'text/plain' and not raw_body:
+                    # Fallback to plain text if no HTML found
+                    raw_body = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8', errors='replace')
+        
         subject = ''.join([
             part.decode(encoding or 'utf-8') if isinstance(part, bytes) else part
             for part, encoding in decode_header(subject)
         ])
         logger.info(f"Trying to read an email with subject {email_id}: {subject}")
 
-        return {'email_id': email_id,'subject': subject, 'from': from_, 'body': body}
+        return {'email_id': int(email_id.decode()),'subject': subject, 'from': from_, 'body': body, 'raw_body': raw_body, 'body_snippet': body[:100] if body else ''}
     except Exception as e:
         logger.error(f"Error fetching email {email_id}: {e}")
         return False
@@ -120,22 +130,24 @@ Click vào <a href="{match.group()}">Link</a> để xác nhận\n
     
     return False
 
-def send_to_telegram(email_data):
-    try:
-        email_type = get_type(email_data['subject'])
-        if (email_type == False):
-            return False
+def get_body_detail(email_data):
+    email_type = get_type(email_data['subject'])
+    if (email_type == False):
+        return False
 
-        body = get_body(email_type, email_data['body'])
-        if (body == False):
-            return False
-        
-        logger.info(f"Trying to send email ({email_data['subject']}) to Telegram")
+    body = get_body(email_type, email_data['body'])
+    if (body == False):
+        return False
+    
+    return body
+
+def send_to_telegram(subject, body):
+    try:
+        logger.info(f"Trying to send email ({subject}) to Telegram")
         response = requests.post(tele_url, data={'chat_id': chat_id, 'text': body, 'parse_mode': 'HTML'})
         logger.info(f"{datetime.now()}: {response}")
         if response.ok:
-            save_email_to_db(email_data)
-            logger.info(f"Sent email {email_data['subject']} to Telegram")
+            logger.info(f"Sent email {subject} to Telegram")
             return True
         else:
             logger.error(f"Failed to send to Telegram: {response.text}")
@@ -156,7 +168,10 @@ def monitor_emails():
                     logger.info(f"Processing email_id: {email_id}")
                     email_data = get_email_details(mail, email_id)
                     if email_data:
-                        send_to_telegram(email_data)
+                        body = get_body_detail(email_data)
+                        if body:
+                            send_to_telegram(email_data['subject'], body)
+                            save_email_to_db(email_data)
                 
                 time.sleep(sleep_time)        
         except Exception as e:
